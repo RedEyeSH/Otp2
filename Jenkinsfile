@@ -2,56 +2,51 @@ pipeline {
     agent any
 
     environment {
-        DOCKERHUB_REPO = 'flamecff/java-shopping-cart'
-        IMAGE_TAG = "${env.BUILD_NUMBER}"
+        DOCKER_IMAGE = "flamecff/shoppingcart:1.0"
+        DOCKER_REGISTRY = "docker.io"
+        DOCKER_CREDENTIALS_ID = "Docker_Hub"
     }
 
     stages {
         stage('Checkout') {
             steps {
-                checkout scm
+                git branch: 'main', url: 'https://github.com/RedEyeSH/Otp2.git'
             }
         }
 
-        stage('Build & Test') {
+        stage('Build JAR') {
             steps {
-                sh 'mvn -B clean verify'
-            }
-            post {
-                always {
-                    junit '**/target/surefire-reports/*.xml'
-                    jacoco execPattern: '**/target/jacoco.exec'
-                }
+                sh 'mvn clean package'
             }
         }
 
-        stage('Package') {
+        stage('Run Tests') {
             steps {
-                sh 'mvn -B package -DskipTests'
+                sh 'mvn test'
             }
         }
 
         stage('Build Docker Image') {
             steps {
-                sh "docker build -t ${DOCKERHUB_REPO}:${IMAGE_TAG} ."
+                sh "docker build -t $DOCKER_IMAGE ."
             }
         }
 
-        stage('Push to Docker Hub') {
+        stage('Push Docker Image') {
             steps {
-                withCredentials([usernamePassword(credentialsId: 'DOCKERHUB_CREDENTIALS', usernameVariable: 'DOCKER_USER', passwordVariable: 'DOCKER_PASS')]) {
-                    sh "echo $DOCKER_PASS | docker login -u $DOCKER_USER --password-stdin"
-                    sh "docker push ${DOCKERHUB_REPO}:${IMAGE_TAG}"
+                withCredentials([usernamePassword(credentialsId: "$DOCKER_CREDENTIALS_ID",
+                                                  passwordVariable: 'DOCKER_PASSWORD',
+                                                  usernameVariable: 'DOCKER_USERNAME')]) {
+                    sh 'echo $DOCKER_PASSWORD | docker login -u $DOCKER_USERNAME --password-stdin'
+                    sh "docker push $DOCKER_IMAGE"
                 }
             }
         }
     }
+
     post {
-        success {
-            echo "Build, test and push successful"
-        }
-        failure {
-            echo "Build failed"
+        always {
+            cleanWs()
         }
     }
 }
